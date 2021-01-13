@@ -22,6 +22,7 @@ import com.hivemq.extension.sdk.api.annotations.NotNull;
 import com.hivemq.extension.sdk.api.annotations.Nullable;
 import com.hivemq.persistence.local.xodus.bucket.BucketUtils;
 import com.hivemq.util.ThreadFactoryUtil;
+import io.netty.util.internal.shaded.org.jctools.queues.MpscUnboundedArrayQueue;
 
 import java.util.Collections;
 import java.util.List;
@@ -32,7 +33,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 
 import static com.hivemq.persistence.SingleWriterService.Task;
 
@@ -126,7 +129,7 @@ public class ProducerQueues {
             return SettableFuture.create(); // Future will never return since we are shutting down.
         }
         final int queueIndex = bucketIndex / bucketsPerQueue;
-        final Queue<TaskWithFuture> queue = queues.get(queueIndex);
+//        final Queue<TaskWithFuture> queue = queues.get(queueIndex);
         final SettableFuture<R> resultFuture;
         if (successCallback == null) {
             resultFuture = SettableFuture.create();
@@ -134,12 +137,60 @@ public class ProducerQueues {
             resultFuture = null;
         }
 
-        queue.add(new TaskWithFuture(resultFuture, task, bucketIndex, queueBucketIndexes.get(queueIndex), successCallback, failedCallback));
-        taskCount.incrementAndGet();
-        singleWriterService.getGlobalTaskCount().incrementAndGet();
-        if (queueTaskCounter.get(queueIndex).getAndIncrement() == 0) {
-            singleWriterService.incrementNonemptyQueueCounter();
+//        singleWriterService.getCallbackExecutors()[queueIndex].execute(() -> {
+//            try {
+//                final R result = task.doTask(bucketIndex, queueBucketIndexes.get(queueIndex), queueIndex);
+//                if (resultFuture != null) {
+//                    resultFuture.set(result);
+//                } else {
+//                    if (successCallback != null) {
+//                        successCallback.afterTask(result);
+//                    }
+//                }
+//            } catch (final Exception e) {
+//                if (resultFuture != null) {
+//                    resultFuture.setException(e);
+//                } else {
+//                    if (failedCallback != null) {
+//                        failedCallback.afterTask(e);
+//                    }
+//                }
+//            }
+//        });
+
+        final MpscUnboundedArrayQueue<Runnable> queue = singleWriterService.queues[queueIndex];
+        final Thread thread = singleWriterService.threads[queueIndex];
+        final AtomicInteger wip = singleWriterService.wips[queueIndex];
+        queue.offer(() -> {
+            try {
+                final R result = task.doTask(bucketIndex, queueBucketIndexes.get(queueIndex), queueIndex);
+                if (resultFuture != null) {
+                    resultFuture.set(result);
+                } else {
+                    if (successCallback != null) {
+                        successCallback.afterTask(result);
+                    }
+                }
+            } catch (final Exception e) {
+                if (resultFuture != null) {
+                    resultFuture.setException(e);
+                } else {
+                    if (failedCallback != null) {
+                        failedCallback.afterTask(e);
+                    }
+                }
+            }
+        });
+        if (wip.getAndIncrement() == 0) {
+            LockSupport.unpark(thread);
         }
+
+//        queue.add(new TaskWithFuture(resultFuture, task, bucketIndex, queueBucketIndexes.get(queueIndex), successCallback, failedCallback));
+//        taskCount.incrementAndGet();
+//        singleWriterService.getGlobalTaskCount().incrementAndGet();
+//        if (queueTaskCounter.get(queueIndex).getAndIncrement() == 0) {
+//            singleWriterService.incrementNonemptyQueueCounter();
+//        }
         return resultFuture;
     }
 
@@ -204,7 +255,7 @@ public class ProducerQueues {
                             taskWithFuture.getFuture().set(result);
                         } else {
                             if (taskWithFuture.getSuccessCallback() != null) {
-                                singleWriterService.getCallbackExecutors()[queueIndex].submit(() -> taskWithFuture.getSuccessCallback().afterTask(result));
+                                singleWriterService.getCallbackExecutors()[queueIndex].execute(() -> taskWithFuture.getSuccessCallback().afterTask(result));
                             }
                         }
                     } catch (final Exception e) {
@@ -212,7 +263,7 @@ public class ProducerQueues {
                             taskWithFuture.getFuture().setException(e);
                         } else {
                             if (taskWithFuture.getFailedCallback() != null) {
-                                singleWriterService.getCallbackExecutors()[queueIndex].submit(() -> taskWithFuture.getFailedCallback().afterTask(e));
+                                singleWriterService.getCallbackExecutors()[queueIndex].execute(() -> taskWithFuture.getFailedCallback().afterTask(e));
                             }
                         }
                     }

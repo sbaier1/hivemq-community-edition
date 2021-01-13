@@ -24,6 +24,9 @@ import com.hivemq.extension.sdk.api.annotations.NotNull;
 import com.hivemq.persistence.local.xodus.bucket.BucketUtils;
 import com.hivemq.util.Exceptions;
 import com.hivemq.util.ThreadFactoryUtil;
+import io.netty.channel.DefaultEventLoop;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.internal.shaded.org.jctools.queues.MpscUnboundedArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +37,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 
 import static com.hivemq.configuration.service.InternalConfigurations.SINGLE_WRITER_CHECK_SCHEDULE;
 
@@ -66,10 +70,16 @@ public class SingleWriterService {
 
     @VisibleForTesting
     @NotNull ExecutorService singleWriterExecutor;
+//    private final @NotNull ExecutorService[] singleWriterExecutors;
+//    private final @NotNull ConcurrentLinkedQueue<ExecutorService> idleSingleWriterExecutors;
     @VisibleForTesting
     public final @NotNull ExecutorService[] callbackExecutors;
     @VisibleForTesting
     final @NotNull ScheduledExecutorService checkScheduler;
+
+    public final @NotNull MpscUnboundedArrayQueue<Runnable> @NotNull [] queues;
+    public final @NotNull Thread @NotNull [] threads;
+    public final @NotNull AtomicInteger @NotNull [] wips;
 
     private final int amountOfQueues;
 
@@ -81,6 +91,12 @@ public class SingleWriterService {
         creditsPerExecution = InternalConfigurations.SINGLE_WRITER_CREDITS_PER_EXECUTION.get();
         shutdownGracePeriod = InternalConfigurations.PERSISTENCE_SHUTDOWN_GRACE_PERIOD.get();
 
+//        singleWriterExecutors = new ExecutorService[threadPoolSize];
+//        idleSingleWriterExecutors = new ConcurrentLinkedQueue<>();
+//        for (int i = 0; i < threadPoolSize; i++) {
+//            singleWriterExecutors[i] = Executors.newSingleThreadExecutor(ThreadFactoryUtil.create("single-writer-" + i));
+//            idleSingleWriterExecutors.offer(singleWriterExecutors[i]);
+//        }
         final ThreadFactory threadFactory = ThreadFactoryUtil.create("single-writer-%d");
         singleWriterExecutor = Executors.newFixedThreadPool(threadPoolSize, threadFactory);
 
@@ -91,10 +107,44 @@ public class SingleWriterService {
         }
 
         callbackExecutors = new ExecutorService[amountOfQueues];
+//        final NioEventLoopGroup group = new NioEventLoopGroup(amountOfQueues, ThreadFactoryUtil.create("single-writer-callback-%d"));
         for (int i = 0; i < amountOfQueues; i++) {
             final ThreadFactory callbackThreadFactory = ThreadFactoryUtil.create("single-writer-callback-" + i);
-            final ExecutorService executorService = Executors.newSingleThreadScheduledExecutor(callbackThreadFactory);
+//            final ExecutorService executorService = Executors.newSingleThreadExecutor(callbackThreadFactory);
+//            final ExecutorService executorService = new ThreadPoolExecutor(1, 1,
+//                    0L, TimeUnit.MILLISECONDS,
+//                    new LinkedBlockingQueue<>(),
+//                    callbackThreadFactory);
+            final ExecutorService executorService = new DefaultEventLoop(callbackThreadFactory);
+//            final ExecutorService executorService = group.next();
             callbackExecutors[i] = executorService;
+        }
+
+        queues = new MpscUnboundedArrayQueue[amountOfQueues];
+        threads = new Thread[amountOfQueues];
+        wips = new AtomicInteger[amountOfQueues];
+        for (int i = 0; i < amountOfQueues; i++) {
+            final MpscUnboundedArrayQueue<Runnable> queue = new MpscUnboundedArrayQueue<>(256);
+            final AtomicInteger wip = new AtomicInteger();
+            final Thread thread = new Thread(() -> {
+                int tasks = 0;
+                while (true) {
+                    Runnable runnable = queue.poll();
+                    while (runnable == null) {
+                        if (wip.addAndGet(-tasks) == 0) {
+                            LockSupport.park();
+                        }
+                        tasks = 0;
+                        runnable = queue.poll();
+                    }
+                    tasks++;
+                    runnable.run();
+                }
+            });
+            thread.start();
+            queues[i] = queue;
+            threads[i] = thread;
+            wips[i] = wip;
         }
 
 
@@ -111,20 +161,19 @@ public class SingleWriterService {
         }
 
         // Periodically check if there are pending tasks in the queues
-        checkScheduler.scheduleAtFixedRate(() -> {
-            try {
-
-                if (runningThreadsCount.getAndIncrement() == 0 && !singleWriterExecutor.isShutdown()) {
-                    singleWriterExecutor.submit(
-                            new SingleWriterTask(nonemptyQueueCounter, globalTaskCount, runningThreadsCount,
-                                    producers));
-                } else {
-                    runningThreadsCount.decrementAndGet();
-                }
-            } catch (final Exception e) {
-                log.error("Exception in single writer check task ", e);
-            }
-        }, SINGLE_WRITER_CHECK_SCHEDULE.get(), SINGLE_WRITER_CHECK_SCHEDULE.get(), TimeUnit.MILLISECONDS);
+//        checkScheduler.scheduleAtFixedRate(() -> {
+//            try {
+//
+//                if (runningThreadsCount.getAndIncrement() == 0 && !singleWriterExecutor.isShutdown()) {
+//                    final ExecutorService executorService = idleSingleWriterExecutors.poll();
+//                    executorService.execute(new SingleWriterTask(executorService));
+//                } else {
+//                    runningThreadsCount.decrementAndGet();
+//                }
+//            } catch (final Exception e) {
+//                log.error("Exception in single writer check task ", e);
+//            }
+//        }, SINGLE_WRITER_CHECK_SCHEDULE.get(), SINGLE_WRITER_CHECK_SCHEDULE.get(), TimeUnit.MILLISECONDS);
     }
 
     @VisibleForTesting
@@ -137,28 +186,40 @@ public class SingleWriterService {
         return persistenceBucketCount;
     }
 
+//    final AtomicInteger c = new AtomicInteger();
+
     public void incrementNonemptyQueueCounter() {
         nonemptyQueueCounter.incrementAndGet();
 
         if (runningThreadsCount.getAndIncrement() < threadPoolSize) {
-            singleWriterExecutor.submit(
-                    new SingleWriterTask(nonemptyQueueCounter, globalTaskCount, runningThreadsCount, producers));
+            singleWriterExecutor.submit(new SingleWriterTask());
         } else {
             runningThreadsCount.decrementAndGet();
         }
+
+//        final long q = nonemptyQueueCounter.incrementAndGet();
+//
+//        if (runningThreadsCount.get() < q) {
+//            final ExecutorService executorService = idleSingleWriterExecutors.poll();
+//            if (executorService != null) {
+//                runningThreadsCount.incrementAndGet();
+////            System.err.println("submit " + c.incrementAndGet());
+//                executorService.execute(new SingleWriterTask(executorService));
+//            }
+//        }
     }
 
-    /**
-     * @param key associated with the task
-     * @return an executor that will is single threaded and guarantied to be the same for equal keys
-     */
-    @NotNull
-    public ExecutorService callbackExecutor(@NotNull final String key) {
-        final int bucketsPerQueue = persistenceBucketCount / amountOfQueues;
-        final int bucketIndex = BucketUtils.getBucket(key, persistenceBucketCount);
-        final int queueIndex = bucketIndex / bucketsPerQueue;
-        return callbackExecutors[queueIndex];
-    }
+//    /**
+//     * @param key associated with the task
+//     * @return an executor that will is single threaded and guarantied to be the same for equal keys
+//     */
+//    @NotNull
+//    public ExecutorService callbackExecutor(@NotNull final String key) {
+//        final int bucketsPerQueue = persistenceBucketCount / amountOfQueues;
+//        final int bucketIndex = BucketUtils.getBucket(key, persistenceBucketCount);
+//        final int queueIndex = bucketIndex / bucketsPerQueue;
+//        return callbackExecutors[queueIndex];
+//    }
 
     public void decrementNonemptyQueueCounter() {
         nonemptyQueueCounter.decrementAndGet();
@@ -240,27 +301,21 @@ public class SingleWriterService {
         checkScheduler.shutdownNow();
     }
 
-    private static class SingleWriterTask implements Runnable {
+    private static final SplittableRandom RANDOM = new SplittableRandom();
 
-        private final AtomicLong nonemptyQueueCounter;
-        private final AtomicLong globalTaskCount;
-        private final AtomicInteger runningThreadsCount;
-        private final ProducerQueues[] producers;
+    private class SingleWriterTask implements Runnable {
+
+//        private final @NotNull ExecutorService executorService;
         final int[] probabilities;
 
         private static final int MIN_PROBABILITY_IN_PERCENT = 5;
 
-        private static final SplittableRandom RANDOM = new SplittableRandom();
+//        public SingleWriterTask(final @NotNull ExecutorService executorService) {
+//            this.executorService = executorService;
+//            probabilities = new int[producers.length];
+//        }
 
-        public SingleWriterTask(
-                final AtomicLong nonemptyQueueCounter, final AtomicLong globalTaskCount,
-                final AtomicInteger runningThreadsCount,
-                final ProducerQueues[] producers) {
-
-            this.nonemptyQueueCounter = nonemptyQueueCounter;
-            this.globalTaskCount = globalTaskCount;
-            this.runningThreadsCount = runningThreadsCount;
-            this.producers = producers;
+        public SingleWriterTask() {
             probabilities = new int[producers.length];
         }
 
@@ -321,6 +376,7 @@ public class SingleWriterService {
                         offset += probabilities[i];
                     }
                 }
+//                idleSingleWriterExecutors.offer(executorService);
 
             } catch (final Throwable t) {
                 // Exceptions in the executed tasks, are passed to there result future.
