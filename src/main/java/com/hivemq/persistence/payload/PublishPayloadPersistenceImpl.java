@@ -87,16 +87,16 @@ public class PublishPayloadPersistenceImpl implements PublishPayloadPersistence 
         final long removeDelay = InternalConfigurations.PAYLOAD_PERSISTENCE_CLEANUP_DELAY.get();
         final int cleanupThreadCount = InternalConfigurations.PAYLOAD_PERSISTENCE_CLEANUP_THREADS.get();
         final long taskSchedule = removeSchedule * cleanupThreadCount;
-        for (int i = 0; i < cleanupThreadCount; i++) {
-            final long initialSchedule = removeSchedule * i;
-            // We schedule an amount of tasks equal to the amount of clean up threads. The rate is a configured value multiplied by the thread count.
-            // Therefore all threads in the pool should be running simultaneously on high load.
-            if (!scheduledExecutorService.isShutdown()) {
-                removeTaskFuture = scheduledExecutorService.scheduleAtFixedRate(
-                        new RemoveEntryTask(payloadCache, localPersistence, bucketLock, removablePayloads, removeDelay,
-                                referenceCounter, taskSchedule), initialSchedule, taskSchedule, TimeUnit.MILLISECONDS);
-            }
-        }
+//        for (int i = 0; i < cleanupThreadCount; i++) {
+//            final long initialSchedule = removeSchedule * i;
+//            // We schedule an amount of tasks equal to the amount of clean up threads. The rate is a configured value multiplied by the thread count.
+//            // Therefore all threads in the pool should be running simultaneously on high load.
+//            if (!scheduledExecutorService.isShutdown()) {
+//                removeTaskFuture = scheduledExecutorService.scheduleAtFixedRate(
+//                        new RemoveEntryTask(payloadCache, localPersistence, bucketLock, removablePayloads, removeDelay,
+//                                referenceCounter, taskSchedule), initialSchedule, taskSchedule, TimeUnit.MILLISECONDS);
+//            }
+//        }
     }
 
     /**
@@ -104,6 +104,8 @@ public class PublishPayloadPersistenceImpl implements PublishPayloadPersistence 
      */
     @Override
     public void add(@NotNull final byte[] payload, final long referenceCount, final long payloadId) {
+        if(true) return;
+
         checkNotNull(payload, "Payload must not be null");
         accessBucket(payloadId, () -> {
             final AtomicLong counter = referenceCounter.get(payloadId);
@@ -127,6 +129,7 @@ public class PublishPayloadPersistenceImpl implements PublishPayloadPersistence 
     //this method is not allowed to return null
     @Override
     public byte @NotNull [] get(final long id) {
+        if (true) return new byte[0];
 
         final byte[] payload = getPayloadOrNull(id);
 
@@ -142,6 +145,8 @@ public class PublishPayloadPersistenceImpl implements PublishPayloadPersistence 
     //this method is allowed to return null
     @Override
     public byte @Nullable [] getPayloadOrNull(final long id) {
+        if (true) return new byte[0];
+
         final byte[] cachedPayload = payloadCache.getIfPresent(id);
         // We don't need to lock here.
         // In case of a lost update issue, we would just overwrite the cache entry with the same payload.
@@ -187,6 +192,8 @@ public class PublishPayloadPersistenceImpl implements PublishPayloadPersistence 
      */
     @Override
     public void decrementReferenceCounter(final long id) {
+        if (true) return;
+
         final AtomicLong counter = referenceCounter.get(id);
         if (counter == null || counter.get() <= 0) {
             log.warn("Tried to decrement a payload reference counter ({}) that was already zero.", id);
