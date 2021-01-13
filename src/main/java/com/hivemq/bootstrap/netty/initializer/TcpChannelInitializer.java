@@ -23,6 +23,7 @@ import io.netty.channel.Channel;
 
 import javax.inject.Provider;
 
+import static com.hivemq.bootstrap.netty.ChannelHandlerNames.MQTT_MESSAGE_DECODER;
 import static com.hivemq.bootstrap.netty.ChannelHandlerNames.NON_SSL_HANDLER;
 
 
@@ -43,7 +44,7 @@ public class TcpChannelInitializer extends AbstractChannelInitializer {
 
     @Override
     protected void addSpecialHandlers(@NotNull final Channel ch) {
-        ch.pipeline().addBefore(FIRST_ABSTRACT_HANDLER, NON_SSL_HANDLER, nonSslHandlerProvider.get());
+        ch.pipeline().addBefore(MQTT_MESSAGE_DECODER, NON_SSL_HANDLER, nonSslHandlerProvider.get());
     }
 
 }

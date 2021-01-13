@@ -69,9 +69,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
 
         ch.attr(ChannelAttributes.LISTENER).set(listener);
 
-        ch.pipeline().addLast(FIRST_ABSTRACT_HANDLER, new ChannelGroupHandler(channelDependencies.getChannelGroup()));
-
-        ch.pipeline().addLast(GLOBAL_THROTTLING_HANDLER, channelDependencies.getGlobalTrafficShapingHandler());
+//        ch.pipeline().addLast(GLOBAL_THROTTLING_HANDLER, channelDependencies.getGlobalTrafficShapingHandler());
 
         ch.pipeline().addLast(MQTT_MESSAGE_DECODER, new MQTTMessageDecoder(channelDependencies));
         ch.pipeline().addLast(MQTT_MESSAGE_ENCODER, channelDependencies.getMqttMessageEncoder());
@@ -79,35 +77,35 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         addNoConnectIdleHandler(ch);
 
         ch.pipeline().addLast(MQTT_MESSAGE_BARRIER, new MessageBarrier(channelDependencies.getMqttServerDisconnector()));
-        ch.pipeline().addLast(MQTT_SUBSCRIBE_MESSAGE_BARRIER, new SubscribeMessageBarrier());
+//        ch.pipeline().addLast(MQTT_SUBSCRIBE_MESSAGE_BARRIER, new SubscribeMessageBarrier());
 
-        // before connack outbound interceptor as it initializes the client context after the connack
-        ch.pipeline().addLast(PLUGIN_INITIALIZER_HANDLER, channelDependencies.getPluginInitializerHandler());
-
-        ch.pipeline().addLast(CONNECT_INBOUND_INTERCEPTOR_HANDLER, channelDependencies.getConnectInboundInterceptorHandler());
-        ch.pipeline().addLast(CONNACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getConnackOutboundInterceptorHandler());
-        ch.pipeline().addLast(PING_INTERCEPTOR_HANDLER, channelDependencies.getPingInterceptorHandler());
-        ch.pipeline().addLast(PUBLISH_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getPublishOutboundInterceptorHandler());
-        ch.pipeline().addLast(PUBACK_INTERCEPTOR_HANDLER, channelDependencies.getPubackInterceptorHandler());
-        ch.pipeline().addLast(PUBREC_INTERCEPTOR_HANDLER, channelDependencies.getPubrecInterceptorHandler());
-        ch.pipeline().addLast(PUBREL_INTERCEPTOR_HANDLER, channelDependencies.getPubrelInterceptorHandler());
-        ch.pipeline().addLast(PUBCOMP_INTERCEPTOR_HANDLER, channelDependencies.getPubcompInterceptorHandler());
-        ch.pipeline().addLast(SUBACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getSubackOutboundInterceptorHandler());
-        ch.pipeline().addLast(UNSUBACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getUnsubackOutboundInterceptorHandler());
-        // after unsuback outbound interceptor as a unsubscribe can be rejected and then a unsuback is sent
-        ch.pipeline().addLast(UNSUBSCRIBE_INBOUND_INTERCEPTOR_HANDLER, channelDependencies.getUnsubscribeInboundInterceptorHandler());
-        ch.pipeline().addLast(DISCONNECT_INTERCEPTOR_HANDLER, channelDependencies.getDisconnectInterceptorHandler());
-
-        // after connect inbound interceptor as it intercepts the connect
-        ch.pipeline().addLast(CLIENT_LIFECYCLE_EVENT_HANDLER, channelDependencies.getClientLifecycleEventHandler());
-
-        ch.pipeline().addLast(MQTT_AUTH_HANDLER, channelDependencies.getAuthHandler());
+//        // before connack outbound interceptor as it initializes the client context after the connack
+//        ch.pipeline().addLast(PLUGIN_INITIALIZER_HANDLER, channelDependencies.getPluginInitializerHandler());
+//
+//        ch.pipeline().addLast(CONNECT_INBOUND_INTERCEPTOR_HANDLER, channelDependencies.getConnectInboundInterceptorHandler());
+//        ch.pipeline().addLast(CONNACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getConnackOutboundInterceptorHandler());
+//        ch.pipeline().addLast(PING_INTERCEPTOR_HANDLER, channelDependencies.getPingInterceptorHandler());
+//        ch.pipeline().addLast(PUBLISH_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getPublishOutboundInterceptorHandler());
+//        ch.pipeline().addLast(PUBACK_INTERCEPTOR_HANDLER, channelDependencies.getPubackInterceptorHandler());
+//        ch.pipeline().addLast(PUBREC_INTERCEPTOR_HANDLER, channelDependencies.getPubrecInterceptorHandler());
+//        ch.pipeline().addLast(PUBREL_INTERCEPTOR_HANDLER, channelDependencies.getPubrelInterceptorHandler());
+//        ch.pipeline().addLast(PUBCOMP_INTERCEPTOR_HANDLER, channelDependencies.getPubcompInterceptorHandler());
+//        ch.pipeline().addLast(SUBACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getSubackOutboundInterceptorHandler());
+//        ch.pipeline().addLast(UNSUBACK_OUTBOUND_INTERCEPTOR_HANDLER, channelDependencies.getUnsubackOutboundInterceptorHandler());
+//        // after unsuback outbound interceptor as a unsubscribe can be rejected and then a unsuback is sent
+//        ch.pipeline().addLast(UNSUBSCRIBE_INBOUND_INTERCEPTOR_HANDLER, channelDependencies.getUnsubscribeInboundInterceptorHandler());
+//        ch.pipeline().addLast(DISCONNECT_INTERCEPTOR_HANDLER, channelDependencies.getDisconnectInterceptorHandler());
+//
+//        // after connect inbound interceptor as it intercepts the connect
+//        ch.pipeline().addLast(CLIENT_LIFECYCLE_EVENT_HANDLER, channelDependencies.getClientLifecycleEventHandler());
+//
+//        ch.pipeline().addLast(MQTT_AUTH_HANDLER, channelDependencies.getAuthHandler());
 
         ch.pipeline().addLast(MQTT_MESSAGE_ID_RETURN_HANDLER, channelDependencies.getReturnMessageIdToPoolHandler());
 
-        if (DROP_MESSAGES_QOS_0) {
-            ch.pipeline().addLast(DROP_OUTGOING_PUBLISHES_HANDLER, channelDependencies.getDropOutgoingPublishesHandler());
-        }
+//        if (DROP_MESSAGES_QOS_0) {
+//            ch.pipeline().addLast(DROP_OUTGOING_PUBLISHES_HANDLER, channelDependencies.getDropOutgoingPublishesHandler());
+//        }
 
         ch.pipeline().addLast(MESSAGE_EXPIRY_HANDLER, channelDependencies.getPublishMessageExpiryHandler());
 
@@ -129,7 +127,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         ch.pipeline().addLast(MQTT_PUBLISH_USER_EVENT_HANDLER, channelDependencies.getPublishUserEventReceivedHandler());
 
         ch.pipeline().addLast(MQTT_UNSUBSCRIBE_HANDLER, channelDependencies.getUnsubscribeHandler());
-        ch.pipeline().addLast(STATISTICS_INITIALIZER, channelDependencies.getStatisticsInitializer());
+//        ch.pipeline().addLast(STATISTICS_INITIALIZER, channelDependencies.getStatisticsInitializer());
 
         addSpecialHandlers(ch);
 

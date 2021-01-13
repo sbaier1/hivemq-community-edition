@@ -42,7 +42,7 @@ public class WebSocketInitializer {
     }
 
     public void addHandlers(final Channel ch) {
-        ch.pipeline().addBefore(AbstractChannelInitializer.FIRST_ABSTRACT_HANDLER, HTTP_SERVER_CODEC, new HttpServerCodec());
+        ch.pipeline().addBefore(MQTT_MESSAGE_DECODER, HTTP_SERVER_CODEC, new HttpServerCodec());
         ch.pipeline().addAfter(HTTP_SERVER_CODEC, HTTP_OBJECT_AGGREGATOR, new HttpObjectAggregator(WEBSOCKET_MAX_CONTENT_LENGTH));
 
         final String webSocketPath = websocketListener.getPath();

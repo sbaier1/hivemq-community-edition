@@ -44,7 +44,7 @@ public class MetricsInitializer extends ChannelHandlerAdapter {
     @Override
     public void handlerAdded(final ChannelHandlerContext ctx) throws Exception {
 
-        ctx.pipeline().addAfter(ALL_CHANNELS_GROUP_HANDLER, GLOBAL_TRAFFIC_COUNTER, globalTrafficCounter);
+        ctx.pipeline().addBefore(MQTT_MESSAGE_DECODER, GLOBAL_TRAFFIC_COUNTER, globalTrafficCounter);
         ctx.pipeline().addAfter(MQTT_MESSAGE_ENCODER, GLOBAL_MQTT_MESSAGE_COUNTER, globalMQTTMessageCounter);
 
         //We're removing ourselves after the statistic handlers were added
