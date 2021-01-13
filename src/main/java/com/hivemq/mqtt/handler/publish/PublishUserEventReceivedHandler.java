@@ -40,23 +40,31 @@ public class PublishUserEventReceivedHandler extends ChannelInboundHandlerAdapte
         if (evt instanceof PublishWithFuture) {
             publish = ((PublishWithFuture) evt);
             statusFuture = ((PublishWithFuture) evt).getFuture();
-            writePublish(ctx, publish, statusFuture);
+            writePublish(ctx, publish, statusFuture, ((PublishWithFuture) evt).isFlush());
         } else if (evt instanceof PUBLISH) {
             publish = (PUBLISH) evt;
-            writePublish(ctx, publish, null);
+            writePublish(ctx, publish, null, true);
         } else {
             super.userEventTriggered(ctx, evt);
         }
 
     }
 
-    private void writePublish(final ChannelHandlerContext ctx, final PUBLISH publish, @Nullable final SettableFuture<PublishStatus> statusFuture) {
+    private void writePublish(final ChannelHandlerContext ctx, final PUBLISH publish, @Nullable final SettableFuture<PublishStatus> statusFuture, final boolean flush) {
 
         if (statusFuture == null) {
-            ctx.writeAndFlush(publish);
+            if (flush) {
+                ctx.writeAndFlush(publish);
+            } else {
+                ctx.write(publish);
+            }
         } else {
             final ChannelPromise channelPromise = ctx.channel().newPromise();
-            ctx.writeAndFlush(publish, channelPromise);
+            if (flush) {
+                ctx.writeAndFlush(publish, channelPromise);
+            } else {
+                ctx.write(publish, channelPromise);
+            }
 
             channelPromise.addListener(new PublishWritePromiseListener(statusFuture));
         }

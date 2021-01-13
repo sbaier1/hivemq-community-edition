@@ -29,6 +29,7 @@ public class PublishWithFuture extends PUBLISH {
     @NotNull
     private final SettableFuture<PublishStatus> future;
     private final boolean shared;
+    private final boolean flush;
 
     public PublishWithFuture(@NotNull final PUBLISH publish,
                              @NotNull final SettableFuture<PublishStatus> future,
@@ -40,9 +41,18 @@ public class PublishWithFuture extends PUBLISH {
                              @NotNull final SettableFuture<PublishStatus> future,
                              final boolean shared,
                              @Nullable final PublishPayloadPersistence persistence) {
+        this(publish, future, shared, persistence, true);
+    }
+
+    public PublishWithFuture(@NotNull final PUBLISH publish,
+                             @NotNull final SettableFuture<PublishStatus> future,
+                             final boolean shared,
+                             @Nullable final PublishPayloadPersistence persistence,
+                             final boolean flush) {
         super(publish, persistence);
         this.future = future;
         this.shared = shared;
+        this.flush = flush;
     }
 
     @NotNull
@@ -52,5 +62,9 @@ public class PublishWithFuture extends PUBLISH {
 
     public boolean isShared() {
         return shared;
+    }
+
+    public boolean isFlush() {
+        return flush;
     }
 }

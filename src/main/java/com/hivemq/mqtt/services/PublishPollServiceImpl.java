@@ -185,10 +185,11 @@ public class PublishPollServiceImpl implements PublishPollService {
                 }
 
                 final AtomicInteger inFlightMessages = inFlightMessageCount(channel);
-                for (final PUBLISH publish : publishes) {
+                for (int i = 0; i < publishes.size(); i++) {
+                    final PUBLISH publish = publishes.get(i);
                     inFlightMessages.incrementAndGet();
                     try {
-                        sendOutPublish(publish, false, channel, client, messageIDPool, client);
+                        sendOutPublish(publish, false, channel, client, messageIDPool, client, i == publishes.size() - 1);
                     } catch (final PayloadPersistenceException e) {
                         // We don't prevent other messages form being published in case the reference is missing
                         log.error("Payload reference error for publish on topic: " + publish.getTopic(), e);
@@ -245,7 +246,7 @@ public class PublishPollServiceImpl implements PublishPollService {
                     if (message instanceof PUBLISH) {
                         final PUBLISH publish = (PUBLISH) message;
                         try {
-                            sendOutPublish(publish, false, channel, client, messageIDPool, client);
+                            sendOutPublish(publish, false, channel, client, messageIDPool, client, true);
                         } catch (final PayloadPersistenceException e) {
                             // We don't prevent other messages form being published in case on reference is missing
                             log.error("Payload reference error for publish on topic: " + publish.getTopic(), e);
@@ -351,7 +352,7 @@ public class PublishPollServiceImpl implements PublishPollService {
                         return;
                     }
                     try {
-                        sendOutPublish(publish, true, channel, sharedSubscription, messageIDPool, client);
+                        sendOutPublish(publish, true, channel, sharedSubscription, messageIDPool, client, true);
                     } catch (final PayloadPersistenceException e) {
                         // We don't prevent other messages form being published in case on reference is missing
                         log.error("Payload reference error for publish on topic: " + publish.getTopic(), e);
@@ -373,7 +374,7 @@ public class PublishPollServiceImpl implements PublishPollService {
     }
 
     private void sendOutPublish(PUBLISH publish, final boolean shared, @NotNull final Channel channel, @NotNull final String queueId,
-                                @NotNull final MessageIDPool messageIDPool, @NotNull final String client) {
+                                @NotNull final MessageIDPool messageIDPool, @NotNull final String client, final boolean flush) {
 
         payloadPersistence.add(publish.getPayload(), 1, publish.getPublishId());
         publish = new PUBLISHFactory.Mqtt5Builder().fromPublish(publish).withPersistence(payloadPersistence).build();
@@ -403,7 +404,7 @@ public class PublishPollServiceImpl implements PublishPollService {
             return;
         }
 
-        final PublishWithFuture event = new PublishWithFuture(publish, publishFuture, shared, payloadPersistence);
+        final PublishWithFuture event = new PublishWithFuture(publish, publishFuture, shared, payloadPersistence, flush);
         channel.pipeline().fireUserEventTriggered(event);
     }
 
