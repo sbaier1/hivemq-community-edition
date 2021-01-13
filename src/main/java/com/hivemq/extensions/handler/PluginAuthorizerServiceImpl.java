@@ -107,21 +107,20 @@ public class PluginAuthorizerServiceImpl implements PluginAuthorizerService {
 
         final String clientId = ctx.channel().attr(ChannelAttributes.CLIENT_ID).get();
 
-        final Runnable defaultProcessTask = () -> incomingPublishService.processPublish(ctx, msg, null);
         if (clientId == null) {
             //we must process the msg in every case !
-            ctx.executor().execute(defaultProcessTask);
+            incomingPublishService.processPublish(ctx, msg, null);
             return;
         }
 
         if (!authorizers.areAuthorizersAvailable()) {
-            ctx.executor().execute(defaultProcessTask);
+            incomingPublishService.processPublish(ctx, msg, null);
             return;
         }
 
         final Map<String, AuthorizerProvider> providerMap = authorizers.getAuthorizerProviderMap();
         if (providerMap.isEmpty()) {
-            ctx.executor().execute(defaultProcessTask);
+            incomingPublishService.processPublish(ctx, msg, null);
             return;
         }
 

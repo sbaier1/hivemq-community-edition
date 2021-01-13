@@ -135,11 +135,13 @@ public class IncomingPublishHandler extends SimpleChannelInboundHandler<PUBLISH>
         final ClientContextImpl clientContext = channel.attr(ChannelAttributes.EXTENSION_CLIENT_CONTEXT).get();
         if (clientContext == null) {
             ctx.executor().execute(() -> authorizerService.authorizePublish(ctx, publish));
+//            authorizerService.authorizePublish(ctx, publish);
             return;
         }
         final List<PublishInboundInterceptor> interceptors = clientContext.getPublishInboundInterceptors();
         if (interceptors.isEmpty()) {
             ctx.executor().execute(() -> authorizerService.authorizePublish(ctx, publish));
+//            authorizerService.authorizePublish(ctx, publish);
             return;
         }
 
