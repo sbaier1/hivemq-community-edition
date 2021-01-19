@@ -159,7 +159,7 @@ public class ProducerQueues {
 //        });
 
         final MpscUnboundedArrayQueue<Runnable> queue = singleWriterService.queues[queueIndex];
-        final Thread thread = singleWriterService.threads[queueIndex];
+//        final Thread thread = singleWriterService.threads[queueIndex];
         final AtomicInteger wip = singleWriterService.wips[queueIndex];
         queue.offer(() -> {
             try {
@@ -182,7 +182,19 @@ public class ProducerQueues {
             }
         });
         if (wip.getAndIncrement() == 0) {
-            LockSupport.unpark(thread);
+//            LockSupport.unpark(thread);
+            int missed = 1;
+            do {
+                while (true) {
+                    final Runnable runnable = queue.poll();
+                    if (runnable != null) {
+                        runnable.run();
+                    } else {
+                        break;
+                    }
+                }
+                missed = wip.addAndGet(-missed);
+            } while (missed != 0);
         }
 
 //        queue.add(new TaskWithFuture(resultFuture, task, bucketIndex, queueBucketIndexes.get(queueIndex), successCallback, failedCallback));
