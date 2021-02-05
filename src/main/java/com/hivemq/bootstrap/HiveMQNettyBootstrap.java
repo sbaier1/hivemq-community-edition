@@ -37,6 +37,8 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.incubator.codec.quic.InsecureQuicTokenHandler;
+import io.netty.incubator.codec.quic.QuicServerCodecBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -110,10 +112,14 @@ public class HiveMQNettyBootstrap {
             final String bindAddress = quicListener.getBindAddress();
             final Integer port = quicListener.getPort();
             log.info("Starting QUIC listener on address {} and port {}", bindAddress, port);
+
+            final ChannelHandler handler = new QuicServerCodecBuilder().tokenHandler(InsecureQuicTokenHandler.INSTANCE)
+                    .handler(channelInitializerFactory.getChannelInitializer(quicListener))
+                    .build();
             final ChannelFuture bind = b
                     .group(nettyConfiguration.getParentEventLoopGroup())
                     .channel(NioDatagramChannel.class)
-                    .handler(channelInitializerFactory.getChannelInitializer(quicListener))
+                    .handler(handler)
                     .bind(createInetSocketAddress(bindAddress, port));
             futures.add(new BindInformation(quicListener, bind));
         }
