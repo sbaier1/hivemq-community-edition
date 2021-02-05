@@ -55,7 +55,7 @@ public interface ListenerConfigurationService {
     List<TcpListener> getTcpListeners();
 
     /**
-     * @return a unmodifiable list of all active TCP listeners
+     * @return a unmodifiable list of all active QUIC listeners
      */
     @ReadOnly
     List<QuicListener> getQuicListeners();
