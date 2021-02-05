@@ -75,6 +75,8 @@ public class ListenerConfigurator {
     @Nullable Listener convertListener(final @NotNull ListenerEntity entity) {
         if (entity instanceof TCPListenerEntity) {
             return convertTcpListener((TCPListenerEntity) entity);
+        } else if (entity instanceof QUICListenerEntity) {
+            return convertQuicListener((QUICListenerEntity) entity);
 
         } else if (entity instanceof WebsocketListenerEntity) {
             return convertWebsocketListener((WebsocketListenerEntity) entity);
@@ -86,6 +88,11 @@ public class ListenerConfigurator {
             return convertTlsWebsocketListener((TlsWebsocketListenerEntity) entity);
         }
         return null;
+    }
+
+    @NotNull QuicListener convertQuicListener(final @NotNull QUICListenerEntity entity) {
+        return new QuicListener(entity.getPort(),
+                entity.getBindAddress());
     }
 
     @NotNull TcpListener convertTcpListener(final @NotNull TCPListenerEntity entity) {

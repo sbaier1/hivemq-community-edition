@@ -51,7 +51,8 @@ public class ListenerConfigurationServiceImpl implements InternalListenerConfigu
         if (listener.getClass().equals(TcpListener.class) ||
                 listener.getClass().equals(TlsTcpListener.class) ||
                 listener.getClass().equals(WebsocketListener.class) ||
-                listener.getClass().equals(TlsWebsocketListener.class)) {
+                listener.getClass().equals(TlsWebsocketListener.class) ||
+                listener.getClass().equals(QuicListener.class)) {
 
             log.debug("Adding {} on bind address {} and port {}. Name: {}.",
                     listener.readableName(), listener.getBindAddress(),
@@ -82,6 +83,11 @@ public class ListenerConfigurationServiceImpl implements InternalListenerConfigu
     @Override
     public ImmutableList<TcpListener> getTcpListeners() {
         return filterListeners(TcpListener.class);
+    }
+
+    @Override
+    public ImmutableList<QuicListener> getQuicListeners() {
+        return filterListeners(QuicListener.class);
     }
 
     @Override

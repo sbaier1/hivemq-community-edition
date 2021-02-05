@@ -69,6 +69,10 @@ public class ChannelInitializerFactoryImpl implements ChannelInitializerFactory 
             }
         }
 
+        if (listener instanceof QuicListener) {
+            return createQuicInitializer((QuicListener) listener);
+        }
+
         if (listener instanceof WebsocketListener) {
 
             if (listener instanceof TlsWebsocketListener) {
@@ -84,6 +88,11 @@ public class ChannelInitializerFactoryImpl implements ChannelInitializerFactory 
     @NotNull
     protected AbstractChannelInitializer createTcpInitializer(@NotNull final TcpListener listener) {
         return new TcpChannelInitializer(channelDependencies, listener, nonSslHandlerProvider);
+    }
+
+    @NotNull
+    protected AbstractChannelInitializer createQuicInitializer(@NotNull final QuicListener listener) {
+        return new QuicChannelInitializer(channelDependencies, listener, nonSslHandlerProvider);
     }
 
     @NotNull
