@@ -37,8 +37,9 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.incubator.codec.quic.InsecureQuicTokenHandler;
-import io.netty.incubator.codec.quic.QuicServerCodecBuilder;
+import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
+import io.netty.incubator.codec.quic.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +47,10 @@ import javax.inject.Inject;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author Dominik Obermaier
@@ -113,13 +116,54 @@ public class HiveMQNettyBootstrap {
             final Integer port = quicListener.getPort();
             log.info("Starting QUIC listener on address {} and port {}", bindAddress, port);
 
-            final ChannelHandler handler = new QuicServerCodecBuilder().tokenHandler(InsecureQuicTokenHandler.INSTANCE)
-                    .handler(channelInitializerFactory.getChannelInitializer(quicListener))
+            SelfSignedCertificate selfSignedCertificate = null;
+            try {
+                selfSignedCertificate = new SelfSignedCertificate();
+            } catch (CertificateException e) {
+                e.printStackTrace();
+            }
+            QuicSslContext context = QuicSslContextBuilder.forServer(
+                    selfSignedCertificate.privateKey(), null, selfSignedCertificate.certificate())
+                    .applicationProtocols("MQTT").build();
+            final ChannelHandler codec = new QuicServerCodecBuilder()
+                    .sslContext(context)
+                    .maxIdleTimeout(30000, TimeUnit.MILLISECONDS)
+                    // Configure some limits for the maximal number of streams (and the data) that we want to handle.
+                    .initialMaxData(10000000)
+                    .initialMaxStreamDataBidirectionalLocal(1000000)
+                    .initialMaxStreamDataBidirectionalRemote(1000000)
+                    .initialMaxStreamsBidirectional(100)
+                    .initialMaxStreamsUnidirectional(100)
+                    .streamHandler(channelInitializerFactory.getChannelInitializer(quicListener))
+                    .tokenHandler(InsecureQuicTokenHandler.INSTANCE)
+                    .handler(new ChannelInboundHandlerAdapter() {
+                        @Override
+                        public void channelActive(ChannelHandlerContext ctx) {
+                            QuicChannel channel = (QuicChannel) ctx.channel();
+                            channel.pipeline().addLast(new LoggingHandler());
+                            //ctx.pipeline().addFirst();
+                            // Create streams etc..
+                            log.info("Connected?");
+                        }
+
+                        public void channelInactive(ChannelHandlerContext ctx) {
+                            ((QuicChannel) ctx.channel()).collectStats().addListener(f -> {
+                                if (f.isSuccess()) {
+                                    log.info("Connection closed: {}", f.getNow());
+                                }
+                            });
+                        }
+
+                        @Override
+                        public boolean isSharable() {
+                            return true;
+                        }
+                    })
                     .build();
             final ChannelFuture bind = b
                     .group(nettyConfiguration.getParentEventLoopGroup())
                     .channel(NioDatagramChannel.class)
-                    .handler(handler)
+                    .handler(codec)
                     .bind(createInetSocketAddress(bindAddress, port));
             futures.add(new BindInformation(quicListener, bind));
         }
