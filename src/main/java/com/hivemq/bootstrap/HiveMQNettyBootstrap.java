@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.hivemq.bootstrap;
 
 import com.google.common.base.Function;
@@ -82,8 +83,8 @@ public class HiveMQNettyBootstrap {
 
         //Adding shutdown hook for graceful shutdown
         final int shutdownTimeout = InternalConfigurations.EVENT_LOOP_GROUP_SHUTDOWN_TIMEOUT;
-        shutdownHooks.add(new NettyShutdownHook(
-                nettyConfiguration.getChildEventLoopGroup(), nettyConfiguration.getParentEventLoopGroup(),
+        shutdownHooks.add(new NettyShutdownHook(nettyConfiguration.getChildEventLoopGroup(),
+                nettyConfiguration.getParentEventLoopGroup(),
                 shutdownTimeout));
 
         final List<BindInformation> futures = new ArrayList<>();
@@ -122,11 +123,12 @@ public class HiveMQNettyBootstrap {
             } catch (CertificateException e) {
                 e.printStackTrace();
             }
-            QuicSslContext context = QuicSslContextBuilder.forServer(
-                    selfSignedCertificate.privateKey(), null, selfSignedCertificate.certificate())
-                    .applicationProtocols("MQTT").build();
-            final ChannelHandler codec = new QuicServerCodecBuilder()
-                    .sslContext(context)
+            // TODO get this working without SSL as well, add configuration for the QUIC tls listener separately.
+            QuicSslContext context = QuicSslContextBuilder.forServer(selfSignedCertificate.privateKey(),
+                    null,
+                    selfSignedCertificate.certificate()).applicationProtocols("MQTT").build();
+            final ChannelHandler codec = new QuicServerCodecBuilder().sslContext(context)
+                    // TODO configs for all these parameters
                     .maxIdleTimeout(30000, TimeUnit.MILLISECONDS)
                     // Configure some limits for the maximal number of streams (and the data) that we want to handle.
                     .initialMaxData(10000000)
@@ -134,23 +136,19 @@ public class HiveMQNettyBootstrap {
                     .initialMaxStreamDataBidirectionalRemote(1000000)
                     .initialMaxStreamsBidirectional(100)
                     .initialMaxStreamsUnidirectional(100)
+                    // Streams are what actually carries the MQTT information
                     .streamHandler(channelInitializerFactory.getChannelInitializer(quicListener))
+                    // TODO QUIC tokens
                     .tokenHandler(InsecureQuicTokenHandler.INSTANCE)
                     .handler(new ChannelInboundHandlerAdapter() {
                         @Override
                         public void channelActive(ChannelHandlerContext ctx) {
-                            QuicChannel channel = (QuicChannel) ctx.channel();
-                            channel.pipeline().addLast(new LoggingHandler());
-                            //ctx.pipeline().addFirst();
-                            // Create streams etc..
-                            log.info("Connected?");
+                            // Client connected (no stream yet)
                         }
 
                         public void channelInactive(ChannelHandlerContext ctx) {
                             ((QuicChannel) ctx.channel()).collectStats().addListener(f -> {
-                                if (f.isSuccess()) {
-                                    log.info("Connection closed: {}", f.getNow());
-                                }
+                                // Connection was closed
                             });
                         }
 
@@ -160,8 +158,7 @@ public class HiveMQNettyBootstrap {
                         }
                     })
                     .build();
-            final ChannelFuture bind = b
-                    .group(nettyConfiguration.getParentEventLoopGroup())
+            final ChannelFuture bind = b.group(nettyConfiguration.getParentEventLoopGroup())
                     .channel(NioDatagramChannel.class)
                     .handler(codec)
                     .bind(createInetSocketAddress(bindAddress, port));
@@ -177,7 +174,8 @@ public class HiveMQNettyBootstrap {
         for (final TcpListener tcpListener : tcpListeners) {
 
             final ServerBootstrap b = createServerBootstrap(nettyConfiguration.getParentEventLoopGroup(),
-                    nettyConfiguration.getChildEventLoopGroup(), tcpListener);
+                    nettyConfiguration.getChildEventLoopGroup(),
+                    tcpListener);
             final String bindAddress = tcpListener.getBindAddress();
 
             final Integer port = tcpListener.getPort();
@@ -198,7 +196,8 @@ public class HiveMQNettyBootstrap {
         for (final TlsTcpListener tlsTcpListener : tlsTcpListeners) {
 
             final ServerBootstrap b = createServerBootstrap(nettyConfiguration.getParentEventLoopGroup(),
-                    nettyConfiguration.getChildEventLoopGroup(), tlsTcpListener);
+                    nettyConfiguration.getChildEventLoopGroup(),
+                    tlsTcpListener);
             final String bindAddress = tlsTcpListener.getBindAddress();
             final Integer port = tlsTcpListener.getPort();
             log.info("Starting TLS TCP listener on address {} and port {}", bindAddress, port);
@@ -215,7 +214,8 @@ public class HiveMQNettyBootstrap {
         for (final WebsocketListener websocketListener : websocketListeners) {
 
             final ServerBootstrap b = createServerBootstrap(nettyConfiguration.getParentEventLoopGroup(),
-                    nettyConfiguration.getChildEventLoopGroup(), websocketListener);
+                    nettyConfiguration.getChildEventLoopGroup(),
+                    websocketListener);
             final String bindAddress = websocketListener.getBindAddress();
             final Integer port = websocketListener.getPort();
             log.info("Starting Websocket listener on address {} and port {}", bindAddress, port);
@@ -233,7 +233,8 @@ public class HiveMQNettyBootstrap {
         for (final TlsWebsocketListener tlsWebsocketListener : tlsWebsocketListeners) {
 
             final ServerBootstrap b = createServerBootstrap(nettyConfiguration.getParentEventLoopGroup(),
-                    nettyConfiguration.getChildEventLoopGroup(), tlsWebsocketListener);
+                    nettyConfiguration.getChildEventLoopGroup(),
+                    tlsWebsocketListener);
             final String bindAddress = tlsWebsocketListener.getBindAddress();
             final Integer port = tlsWebsocketListener.getPort();
             log.info("Starting Websocket TLS listener on address {} and port {}", bindAddress, port);
@@ -272,8 +273,7 @@ public class HiveMQNettyBootstrap {
     private ListenableFuture<List<ListenerStartupInformation>> aggregatedFuture(
             final @NotNull List<BindInformation> bindInformation) {
 
-        final List<ListenableFuture<ListenerStartupInformation>> listenableFutures = Lists.transform(
-                bindInformation,
+        final List<ListenableFuture<ListenerStartupInformation>> listenableFutures = Lists.transform(bindInformation,
                 new Function<BindInformation, ListenableFuture<ListenerStartupInformation>>() {
                     @Override
                     public ListenableFuture<ListenerStartupInformation> apply(final BindInformation input) {
@@ -301,7 +301,8 @@ public class HiveMQNettyBootstrap {
 
     @NotNull
     private ServerBootstrap createServerBootstrap(
-            final @NotNull EventLoopGroup bossGroup, final @NotNull EventLoopGroup workerGroup,
+            final @NotNull EventLoopGroup bossGroup,
+            final @NotNull EventLoopGroup workerGroup,
             final @NotNull Listener listener) {
         final ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
@@ -338,12 +339,13 @@ public class HiveMQNettyBootstrap {
         final int writeBufferHigh = InternalConfigurations.LISTENER_CLIENT_WRITE_BUFFER_HIGH_THRESHOLD;
         final int writeBufferLow = InternalConfigurations.LISTENER_CLIENT_WRITE_BUFFER_LOW_THRESHOLD;
 
-        final ClientWriteBufferProperties properties = Validators.validateWriteBufferProperties(
-                new ClientWriteBufferProperties(writeBufferHigh, writeBufferLow));
+        final ClientWriteBufferProperties properties =
+                Validators.validateWriteBufferProperties(new ClientWriteBufferProperties(
+                        writeBufferHigh,
+                        writeBufferLow));
 
         //it is assumed that the ClientWriteBufferProperties that the listener returns was validated by Validators.validateWriteBufferProperties()
-        b.childOption(
-                ChannelOption.WRITE_BUFFER_WATER_MARK,
+        b.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK,
                 new WriteBufferWaterMark(properties.getLowThreshold(), properties.getHighThreshold()));
 
     }
